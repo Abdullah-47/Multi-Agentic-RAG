@@ -48,6 +48,8 @@ def initialize_system(chunk_size: int = 250, k: int = 3, temperature: float = 0.
         "https://medium.com/@sridevi.gogusetty/rag-vs-graph-rag-llama-3-1-8f2717c554e6",
         "https://medium.com/@sridevi.gogusetty/retrieval-augmented-generation-rag-gemini-pro-pinecone-1a0a1bfc0534",
         "https://medium.com/@sridevi.gogusetty/introduction-to-ollama-run-llm-locally-data-privacy-f7e4e58b37a0",
+        "https://ollama.com/library",
+        "https://ai.google.dev/docs/gemini_api_overview",
     ]
     
     docs = [WebBaseLoader(url).load() for url in urls]
