@@ -21,3 +21,4 @@ docx2txt
 beautifulsoup4
 
 pydantic<2.0.0
+sqlite3 > 3.35.0
