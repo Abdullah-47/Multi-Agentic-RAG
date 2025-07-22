@@ -13,9 +13,6 @@ langchain-groq
 langchainhub
 tavily-python
 
-# Vectorstore & System Fix
-pysqlite3-binary
-chromadb
 
 # Document Loaders dependencies
 pypdf
