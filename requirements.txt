@@ -10,15 +10,14 @@ langgraph
 # Model and tool integrations
 langchain-google-genai
 langchain-groq
+langchain-hub
 tavily-python
 
-# Vectorstore
+# Vectorstore & System Fix
+pysqlite3-binary
 chromadb
 
 # Document Loaders dependencies
 pypdf
 docx2txt
 beautifulsoup4
-
-pydantic<2.0.0
-pysqlite3-binary
