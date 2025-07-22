@@ -1,7 +1,7 @@
 import streamlit as st
 import os
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain_community.document_loaders import WebBaseLoader
+from langchain_community.document_loaders import WebBaseLoader, TextLoader
 from langchain_community.vectorstores import Chroma
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
 from langchain.tools.retriever import create_retriever_tool
@@ -16,8 +16,11 @@ from typing import List, Literal, Annotated, Optional, Tuple, Dict, Any
 from langchain_core.prompts import PromptTemplate
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.pydantic_v1 import BaseModel, Field, ConfigDict
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader
 import time
 import re
+import tempfile
+import hashlib
 
 # Set environment variables
 os.environ["LANGCHAIN_TRACING_V2"] = "true"
@@ -33,7 +36,6 @@ class AgentState(BaseModel):
     chat_history: List[BaseMessage] = Field(default_factory=list)
     reformulation_count: int = 0
     current_query: Optional[str] = None
-    # Change retrieved_docs to store a list of dicts, each representing a document
     retrieved_docs: List[Dict[str, Any]] = Field(default_factory=list) 
     generated_answer: Optional[str] = None
     next_step: Optional[str] = None
@@ -41,24 +43,70 @@ class AgentState(BaseModel):
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
 # Initialize components with configurable parameters
-@st.cache_resource
-def initialize_system(chunk_size: int = 250, k: int = 3, temperature: float = 0.0):
+def initialize_system(urls: List[str], uploaded_files: List[Any], 
+                     chunk_size: int = 250, k: int = 3, temperature: float = 0.0):
     # Load and process documents
-    urls = [
-        "https://medium.com/@sridevi.gogusetty/rag-vs-graph-rag-llama-3-1-8f2717c554e6",
-        "https://medium.com/@sridevi.gogusetty/retrieval-augmented-generation-rag-gemini-pro-pinecone-1a0a1bfc0534",
-        "https://medium.com/@sridevi.gogusetty/introduction-to-ollama-run-llm-locally-data-privacy-f7e4e58b37a0",
-        "https://ollama.com/library",
-        "https://ai.google.dev/docs/gemini_api_overview",
-    ]
+    docs = []
     
-    docs = [WebBaseLoader(url).load() for url in urls]
-    docs_list = [item for sublist in docs for item in sublist]
+    # Load from URLs
+    for url in urls:
+        try:
+            docs.extend(WebBaseLoader(url).load())
+        except Exception as e:
+            st.error(f"Failed to load {url}: {str(e)}")
+    
+    # Load from uploaded files
+    for uploaded_file in uploaded_files:
+        try:
+            # Save uploaded file to a temp file
+            with tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(uploaded_file.name)[1]) as temp_file:
+                temp_file.write(uploaded_file.getvalue())
+                temp_file_path = temp_file.name
+
+            if os.path.getsize(temp_file_path) == 0:
+                st.error(f"Uploaded file {uploaded_file.name} is empty and was skipped.")
+                os.unlink(temp_file_path)
+                continue
+
+            ext = os.path.splitext(uploaded_file.name)[1].lower()
+            if ext == ".txt":
+                loader = TextLoader(temp_file_path, encoding="utf-8")
+            elif ext == ".pdf":
+                loader = PyPDFLoader(temp_file_path)
+            elif ext == ".docx":
+                loader = Docx2txtLoader(temp_file_path)
+            else:
+                st.error(f"Unsupported file type: {uploaded_file.name}")
+                os.unlink(temp_file_path)
+                continue
+
+            file_docs = loader.load()
+            for doc in file_docs:
+                doc.metadata["source"] = uploaded_file.name
+            docs.extend(file_docs)
+            os.unlink(temp_file_path)  # Clean up temp file
+        except Exception as e:
+            st.error(f"Failed to load uploaded file {uploaded_file.name}: {str(e)}")
+    
+    if not docs:
+        st.warning("No documents loaded. Using default knowledge sources.")
+        default_urls = [
+            "https://medium.com/@sridevi.gogusetty/rag-vs-graph-rag-llama-3-1-8f2717c554e6",
+            "https://medium.com/@sridevi.gogusetty/retrieval-augmented-generation-rag-gemini-pro-pinecone-1a0a1bfc0534",
+            "https://medium.com/@sridevi.gogusetty/introduction-to-ollama-run-llm-locally-data-privacy-f7e4e58b37a0",
+            "https://ollama.com/library",
+            "https://ai.google.dev/docs/gemini_api_overview",
+        ]
+        for url in default_urls:
+            try:
+                docs.extend(WebBaseLoader(url).load())
+            except Exception as e:
+                st.error(f"Failed to load default URL {url}: {str(e)}")
     
     text_splitter = RecursiveCharacterTextSplitter.from_tiktoken_encoder(
         chunk_size=chunk_size, chunk_overlap=0
     )
-    doc_splits = text_splitter.split_documents(docs_list)
+    doc_splits = text_splitter.split_documents(docs)
     
     # Create vector store
     embeddings = GoogleGenerativeAIEmbeddings(model="models/embedding-001", 
@@ -72,11 +120,10 @@ def initialize_system(chunk_size: int = 250, k: int = 3, temperature: float = 0.
     retriever_instance = vectorstore.as_retriever(search_kwargs={"k": k}) 
     
     # The retriever_tool that when invoked, returns a *string* of concatenated content
-    # We will use retriever_instance directly in retrieve_agent for more control.
     retriever_tool_for_display = create_retriever_tool(
         retriever_instance,
-        "retrieve_blog_posts",
-        "Search and return information about sridevi gogusetty blog posts on RAG, RAG VS Graph RAG, Ollama.",
+        "retrieve_knowledge",
+        "Search and return information from the provided knowledge sources.",
     )
     
     search = TavilySearchAPIWrapper()
@@ -113,7 +160,7 @@ def initialize_system(chunk_size: int = 250, k: int = 3, temperature: float = 0.
             "reformulate": "reformulate_query",
             "web_search": "web_search",
             "clarify": "ask_clarification",
-            "generate": "generate" # Direct generation for simple conversational queries
+            "generate": "generate"
         }
     )
     
@@ -142,7 +189,7 @@ def initialize_system(chunk_size: int = 250, k: int = 3, temperature: float = 0.
     workflow.add_edge("generate", "fact_check")
     workflow.add_edge("fact_check", "safety_check")
     workflow.add_edge("safety_check", END)
-    workflow.add_edge("ask_clarification", END) # Clarification ends the current turn
+    workflow.add_edge("ask_clarification", END)
     
     # Return the raw retriever_instance for use in retrieve_agent
     return workflow.compile(), retriever_instance, web_search_tool, temperature, retriever_tool_for_display
@@ -550,13 +597,29 @@ st.set_page_config(page_title="Multi-Agent RAG System", layout="wide")
 st.title("🤖 Advanced Agentic RAG System")
 st.caption("Multi-agent collaboration with self-correction and memory")
 
-# Sidebar for parameters
+# Sidebar for parameters and knowledge sources
 with st.sidebar:
     st.subheader("Configuration")
     chunk_size = st.slider("Text Chunk Size", 100, 1000, 250, 50)
     retriever_k = st.slider("Retriever K Value (Top K Docs)", 1, 10, 3)
     temperature = st.slider("LLM Temperature", 0.0, 1.0, 0.0, 0.1)
-    reset_params = st.button("Apply Parameters")
+    
+    st.divider()
+    st.subheader("Knowledge Sources")
+    
+    # URL input
+    st.write("Add URLs (one per line):")
+    url_input = st.text_area("Enter URLs", height=150, 
+                             value="https://medium.com/@sridevi.gogusetty/rag-vs-graph-rag-llama-3-1-8f2717c554e6\nhttps://medium.com/@sridevi.gogusetty/retrieval-augmented-generation-rag-gemini-pro-pinecone-1a0a1bfc0534",
+                             label_visibility="collapsed")
+    
+    # File upload
+    uploaded_files = st.file_uploader("Upload text files", 
+                                     type=["txt", "pdf", "docx"], 
+                                     accept_multiple_files=True)
+    
+    # Reset button
+    reset_params = st.button("Apply Parameters & Update Knowledge")
     
     st.divider()
     st.subheader("Agent Roles")
@@ -582,20 +645,38 @@ if "final_answer" not in st.session_state:
 if "params_applied" not in st.session_state:
     st.session_state.params_applied = False
 if "temperature" not in st.session_state:
-    st.session_state.temperature = 0.0 # Default if not set by slider
+    st.session_state.temperature = 0.0
+if "knowledge_hash" not in st.session_state:
+    st.session_state.knowledge_hash = ""
 
-# Initialize system with parameters
-if reset_params or not st.session_state.params_applied:
-    with st.spinner("Configuring system with new parameters..."):
+# Calculate current knowledge hash
+def calculate_knowledge_hash(urls, files):
+    content = "|".join(sorted(urls))
+    for file in files:
+        content += file.getvalue().decode(errors="ignore")
+    return hashlib.md5(content.encode()).hexdigest()
+
+# Parse URLs from input
+urls = [url.strip() for url in url_input.split('\n') if url.strip()]
+
+# Check if knowledge has changed
+current_knowledge_hash = calculate_knowledge_hash(urls, uploaded_files)
+knowledge_changed = current_knowledge_hash != st.session_state.knowledge_hash
+
+# Initialize or update system
+if reset_params or not st.session_state.params_applied or knowledge_changed:
+    with st.spinner("Configuring system with new parameters and knowledge sources..."):
         try:
-            # retriever_instance is the raw retriever, retriever_tool_for_display is the LangChain tool version
             st.session_state.graph, st.session_state.retriever_instance, st.session_state.web_search_tool, st.session_state.temperature, st.session_state.retriever_tool_for_display = initialize_system(
+                urls=urls,
+                uploaded_files=uploaded_files,
                 chunk_size=chunk_size,
                 k=retriever_k,
                 temperature=temperature
             )
             st.session_state.params_applied = True
-            st.success("System configured!")
+            st.session_state.knowledge_hash = current_knowledge_hash
+            st.success("System configured with new knowledge!")
         except Exception as e:
             st.error(f"Configuration failed: {str(e)}")
             st.stop()
@@ -611,7 +692,7 @@ with st.container():
             with st.chat_message("assistant"):
                 st.write(msg.content)
     
-    if prompt := st.chat_input("Ask about RAG, Graph RAG, or Ollama..."):
+    if prompt := st.chat_input("Ask about your knowledge sources..."):
         # Add user message to history
         user_msg = HumanMessage(content=prompt)
         st.session_state.chat_history.append(user_msg)
@@ -637,12 +718,12 @@ with st.container():
             try:
                 step_count = 0
                 max_steps = 15
-                current_state = agent_state  # Start with initial state
+                current_state = agent_state
                 
                 # Stream outputs from the graph
                 for output in st.session_state.graph.stream(agent_state):
                     node_name = list(output.keys())[0]
-                    node_state = output[node_name]  # This is the state dictionary
+                    node_state = output[node_name]
                     
                     status_text.info(f"Executing: **{node_name.replace('_', ' ').title()}**")
                     st.session_state.logs.append(f"Completed node: {node_name}")
@@ -661,7 +742,7 @@ with st.container():
                 progress_bar.empty()
                 status_text.success("✅ Workflow completed!")
                 
-                # Process final output - access state as dictionary
+                # Process final output
                 if current_state_updates and 'generated_answer' in current_state_updates:
                     final_answer = current_state_updates['generated_answer']
                     ai_msg = AIMessage(content=final_answer)
@@ -689,8 +770,9 @@ with st.container():
                 
                 with st.chat_message("assistant"):
                     st.write("Sorry, I encountered an error processing your request. Please check the logs.")
+
 # Display results
-with st.expander("Execution Details", expanded=False): # Start collapsed by default
+with st.expander("Execution Details", expanded=False):
     col1, col2 = st.columns([1, 1])
     
     with col1:
@@ -699,12 +781,18 @@ with st.expander("Execution Details", expanded=False): # Start collapsed by defa
         for log in st.session_state.logs:
             log_container.code(log, language="log")
         
-        st.subheader("Knowledge Sources")
-        st.markdown("""
-        - [RAG vs Graph RAG](https://medium.com/@sridevi.gogusetty/rag-vs-graph-rag-llama-3-1-8f2717c554e6)
-        - [RAG with Gemini Pro](https://medium.com/@sridevi.gogusetty/retrieval-augmented-generation-rag-gemini-pro-pinecone-1a0a1bfc0534)
-        - [Introduction to Ollama](https://medium.com/@sridevi.gogusetty/introduction-to-ollama-run-llm-locally-data-privacy-f7e4e58b37a0)
-        """)
+        st.subheader("Active Knowledge Sources")
+        if urls or uploaded_files:
+            st.markdown("**URLs:**")
+            for url in urls:
+                st.markdown(f"- [{url}]({url})")
+            
+            if uploaded_files:
+                st.markdown("**Uploaded Files:**")
+                for file in uploaded_files:
+                    st.markdown(f"- {file.name}")
+        else:
+            st.markdown("Using default knowledge sources")
     
     with col2:
         st.subheader("Workflow Diagram")
@@ -753,12 +841,8 @@ if st.button("Clear Chat History"):
     st.session_state.chat_history = []
     st.session_state.logs = []
     st.session_state.final_answer = ""
-    # Optional: If you want to force re-initialization of graph/tools, you can delete them
-    # del st.session_state.graph 
-    # del st.session_state.retriever_instance
-    # del st.session_state.web_search_tool
-    # del st.session_state.retriever_tool_for_display
-    # st.session_state.params_applied = False # This would force re-init next run
+    st.session_state.get("knowledge_hash", None)  # Clear knowledge hash
+    st.session_state.params_applied = False
     st.rerun()
 
 st.divider()

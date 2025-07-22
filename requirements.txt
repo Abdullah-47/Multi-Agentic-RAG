@@ -1,0 +1,22 @@
+# Main application framework
+streamlit
+
+# Core LangChain libraries
+langchain
+langchain-core
+langchain-community
+langgraph
+
+# Model and tool integrations
+langchain-google-genai
+langchain-groq
+langchain-hub
+tavily-python
+
+# Vectorstore
+chromadb
+
+# Document Loaders dependencies
+pypdf
+docx2txt
+beautifulsoup4
