@@ -1,3 +1,6 @@
+# requirements.txt
+pysqlite3-binary  # Add this first
+
 # Main application framework
 streamlit
 
@@ -7,7 +10,7 @@ langchain-core
 langchain-community
 langgraph
 
-# Model and tool integrations (add/remove as needed)
+# Model and tool integrations
 langchain-google-genai
 langchain-groq
 langchainhub
@@ -18,12 +21,8 @@ pypdf
 docx2txt
 beautifulsoup4
 
-# Compatibility: LangChain not yet compatible with Pydantic v2
+# Compatibility
 pydantic<2.0.0
 
-# Optional: Add OpenAI if you use OpenAI models
-# openai
-
-# Optional: Add vector store backends as needed
+# Vector store
 chromadb
-# faiss-cpu
