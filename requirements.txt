@@ -19,3 +19,5 @@ chromadb
 pypdf
 docx2txt
 beautifulsoup4
+
+pydantic<2.0.0
