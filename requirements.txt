@@ -10,7 +10,7 @@ langgraph
 # Model and tool integrations
 langchain-google-genai
 langchain-groq
-langchain-hub
+langchainhub
 tavily-python
 
 # Vectorstore & System Fix
