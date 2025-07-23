@@ -159,6 +159,3 @@ MIT License
 ---
 
 **Enjoy building with advanced agentic RAG!**
-
-```
-
