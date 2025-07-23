@@ -1,5 +1,3 @@
-```
-
 # 🤖 Advanced Agentic RAG System
 
 A powerful, multi-agent Retrieval-Augmented Generation (RAG) application built with Streamlit, LangChain, and Groq LLMs. This project demonstrates a modular, self-correcting workflow for answering user queries using both internal knowledge sources and real-time web search, with built-in fact-checking and safety mechanisms.
