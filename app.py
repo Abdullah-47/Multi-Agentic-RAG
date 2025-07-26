@@ -600,6 +600,12 @@ st.set_page_config(page_title="Multi-Agent RAG System", layout="wide")
 st.title("🤖 Advanced Agentic RAG System")
 st.caption("Multi-agent collaboration with self-correction and memory")
 
+# Recommendation for better results 
+st.info(
+    "🔎 **Recommendation:** For the most accurate and relevant answers, please explicitly add your own URLs or upload documents as knowledge sources. "
+    "Relying only on default sources may yield less tailored results."
+)
+
 # Sidebar for parameters and knowledge sources
 with st.sidebar:
     st.subheader("Configuration")
