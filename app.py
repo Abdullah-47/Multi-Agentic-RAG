@@ -605,31 +605,32 @@ st.info(
     "🔎 **Recommendation:** For the most accurate and relevant answers, please explicitly add your own URLs or upload documents as knowledge sources. "
     "Relying only on default sources may yield less tailored results."
 )
-
-# Sidebar for parameters and knowledge sources
 with st.sidebar:
-    st.subheader("Configuration")
-    chunk_size = st.slider("Text Chunk Size", 100, 1000, 250, 50)
-    retriever_k = st.slider("Retriever K Value (Top K Docs)", 1, 10, 3)
-    temperature = st.slider("LLM Temperature", 0.0, 1.0, 0.0, 0.1)
-    
-    st.divider()
+    st.markdown(f"""
+    **Current Settings:**  
+    - Chunk Size: `{st.session_state.get('chunk_size', 250)}`
+    - Retriever K: `{st.session_state.get('retriever_k', 3)}`
+    - Temperature: `{st.session_state.get('temperature', 0.0)}`
+    """)
+    with st.expander("⚙️ Adjust Configuration", expanded=False):
+        chunk_size = st.slider("Text Chunk Size", 100, 1000, st.session_state.get('chunk_size', 250), 50)
+        retriever_k = st.slider("Retriever K Value (Top K Docs)", 1, 10, st.session_state.get('retriever_k', 3))
+        temperature = st.slider("LLM Temperature", 0.0, 1.0, st.session_state.get('temperature', 0.0), 0.1)
+        st.divider()
     st.subheader("Knowledge Sources")
-    
-    # URL input
     st.write("Add URLs (one per line):")
-    url_input = st.text_area("Enter URLs", height=150, 
-                             value="",
-                             label_visibility="collapsed")
-    
-    # File upload
-    uploaded_files = st.file_uploader("Upload text files", 
-                                     type=["txt", "pdf", "docx"], 
-                                     accept_multiple_files=True)
-    
-    # Reset button
+    url_input = st.text_area(
+        "Enter URLs",
+        height=150,
+        value="",
+        label_visibility="collapsed"
+    )
+    uploaded_files = st.file_uploader(
+        "Upload text files",
+        type=["txt", "pdf", "docx"],
+        accept_multiple_files=True
+    )
     reset_params = st.button("Apply Parameters & Update Knowledge")
-    
     st.divider()
     st.subheader("Agent Roles")
     st.markdown("""
