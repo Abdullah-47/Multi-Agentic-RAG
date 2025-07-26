@@ -619,7 +619,7 @@ with st.sidebar:
     # URL input
     st.write("Add URLs (one per line):")
     url_input = st.text_area("Enter URLs", height=150, 
-                             value="https://medium.com/@sridevi.gogusetty/rag-vs-graph-rag-llama-3-1-8f2717c554e6\nhttps://medium.com/@sridevi.gogusetty/retrieval-augmented-generation-rag-gemini-pro-pinecone-1a0a1bfc0534",
+                             value="",
                              label_visibility="collapsed")
     
     # File upload
